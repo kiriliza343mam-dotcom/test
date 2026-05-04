@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -16,10 +17,40 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 
-// допустимые статусы
+// 🔐 допустимые статусы
 const ALLOWED_STATUSES = ['new', 'in_progress', 'done'];
 
-// 🔹 проверка
+// 🔐 VK настройки
+const VK_TOKEN = process.env.VK_TOKEN;
+const VK_USER_ID = process.env.VK_USER_ID;
+
+// 🔹 отправка сообщения в VK
+const sendVKMessage = async (text) => {
+  if (!VK_TOKEN || !VK_USER_ID) {
+    console.log('⚠️ VK не настроен');
+    return;
+  }
+
+  try {
+    await fetch('https://api.vk.com/method/messages.send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: VK_USER_ID,
+        message: text,
+        random_id: Date.now(),
+        access_token: VK_TOKEN,
+        v: '5.131'
+      })
+    });
+
+    console.log('📨 VK уведомление отправлено');
+  } catch (err) {
+    console.error('❌ VK send error:', err);
+  }
+};
+
+// 🔹 проверка сервера
 app.get('/', (req, res) => {
   res.send('Server is working 🚀');
 });
@@ -67,12 +98,20 @@ app.post('/request', async (req, res) => {
       [name, contact, problem]
     );
 
-    console.log('📩 Новая заявка:', result.rows[0]);
+    const request = result.rows[0];
+
+    console.log('📩 Новая заявка:', request);
+
+    // 🔥 уведомление в VK
+    await sendVKMessage(
+      `🆕 Новая заявка!\n\n👤 ${name}\n📞 ${contact}\n💻 ${problem}`
+    );
 
     res.json({
       success: true,
-      request: result.rows[0]
+      request
     });
+
   } catch (err) {
     console.error('❌ POST error:', err);
     res.status(500).json({ error: 'DB error' });
@@ -102,7 +141,6 @@ app.put('/request/:id', async (req, res) => {
     return res.status(400).json({ error: 'Invalid data' });
   }
 
-  // 🔐 проверка статуса
   if (!ALLOWED_STATUSES.includes(status)) {
     return res.status(400).json({
       error: 'Invalid status',
@@ -122,17 +160,23 @@ app.put('/request/:id', async (req, res) => {
 
     console.log(`🔄 Статус обновлён: id=${id}, status=${status}`);
 
+    // 🔥 уведомление в VK
+    await sendVKMessage(
+      `🔄 Обновление заявки\nID: ${id}\n📌 Новый статус: ${status}`
+    );
+
     res.json({
       success: true,
       request: result.rows[0]
     });
+
   } catch (err) {
     console.error('❌ UPDATE error:', err);
     res.status(500).json({ error: 'DB error' });
   }
 });
 
-// 🔹 удаление
+// 🔹 удаление заявки
 app.delete('/request/:id', async (req, res) => {
   const id = Number(req.params.id);
 
@@ -152,13 +196,18 @@ app.delete('/request/:id', async (req, res) => {
 
     console.log(`🗑 Удалена заявка id=${id}`);
 
+    // 🔥 уведомление (опционально)
+    await sendVKMessage(`🗑 Удалена заявка ID: ${id}`);
+
     res.json({ success: true });
+
   } catch (err) {
     console.error('❌ DELETE error:', err);
     res.status(500).json({ error: 'DB error' });
   }
 });
 
+// 🚀 запуск
 app.listen(PORT, () => {
   console.log(`🚀 Server started on port ${PORT}`);
 });
