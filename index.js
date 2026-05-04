@@ -16,6 +16,9 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 
+// допустимые статусы
+const ALLOWED_STATUSES = ['new', 'in_progress', 'done'];
+
 // 🔹 проверка
 app.get('/', (req, res) => {
   res.send('Server is working 🚀');
@@ -99,13 +102,30 @@ app.put('/request/:id', async (req, res) => {
     return res.status(400).json({ error: 'Invalid data' });
   }
 
+  // 🔐 проверка статуса
+  if (!ALLOWED_STATUSES.includes(status)) {
+    return res.status(400).json({
+      error: 'Invalid status',
+      allowed: ALLOWED_STATUSES
+    });
+  }
+
   try {
-    await pool.query(
-      'UPDATE requests SET status = $1 WHERE id = $2',
+    const result = await pool.query(
+      'UPDATE requests SET status = $1 WHERE id = $2 RETURNING *',
       [status, id]
     );
 
-    res.json({ success: true });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    console.log(`🔄 Статус обновлён: id=${id}, status=${status}`);
+
+    res.json({
+      success: true,
+      request: result.rows[0]
+    });
   } catch (err) {
     console.error('❌ UPDATE error:', err);
     res.status(500).json({ error: 'DB error' });
@@ -121,7 +141,17 @@ app.delete('/request/:id', async (req, res) => {
   }
 
   try {
-    await pool.query('DELETE FROM requests WHERE id = $1', [id]);
+    const result = await pool.query(
+      'DELETE FROM requests WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    console.log(`🗑 Удалена заявка id=${id}`);
+
     res.json({ success: true });
   } catch (err) {
     console.error('❌ DELETE error:', err);
