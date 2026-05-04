@@ -5,7 +5,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 🔐 подключение к PostgreSQL (Railway)
+// 🔐 PostgreSQL (Railway)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -13,16 +13,15 @@ const pool = new Pool({
   }
 });
 
-// ✅ middleware
 app.use(cors());
 app.use(express.json());
 
-// 🔹 проверка сервера
+// 🔹 проверка
 app.get('/', (req, res) => {
   res.send('Server is working 🚀');
 });
 
-// 🔥 создаём таблицу (правильно — через async)
+// 🔥 создаём таблицу
 const initDB = async () => {
   try {
     await pool.query(`
@@ -31,6 +30,7 @@ const initDB = async () => {
         name TEXT NOT NULL,
         contact TEXT NOT NULL,
         problem TEXT NOT NULL,
+        status TEXT DEFAULT 'new',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -47,7 +47,6 @@ initDB();
 app.post('/request', async (req, res) => {
   let { name, contact, problem } = req.body;
 
-  // 🔧 чистим данные
   name = name?.trim();
   contact = contact?.trim();
   problem = problem?.trim();
@@ -91,7 +90,29 @@ app.get('/requests', async (req, res) => {
   }
 });
 
-// 🔹 удаление заявки
+// 🔄 изменение статуса
+app.put('/request/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  const { status } = req.body;
+
+  if (!id || !status) {
+    return res.status(400).json({ error: 'Invalid data' });
+  }
+
+  try {
+    await pool.query(
+      'UPDATE requests SET status = $1 WHERE id = $2',
+      [status, id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ UPDATE error:', err);
+    res.status(500).json({ error: 'DB error' });
+  }
+});
+
+// 🔹 удаление
 app.delete('/request/:id', async (req, res) => {
   const id = Number(req.params.id);
 
@@ -101,7 +122,6 @@ app.delete('/request/:id', async (req, res) => {
 
   try {
     await pool.query('DELETE FROM requests WHERE id = $1', [id]);
-
     res.json({ success: true });
   } catch (err) {
     console.error('❌ DELETE error:', err);
@@ -109,7 +129,6 @@ app.delete('/request/:id', async (req, res) => {
   }
 });
 
-// 🔹 запуск сервера
 app.listen(PORT, () => {
   console.log(`🚀 Server started on port ${PORT}`);
 });
