@@ -54,3 +54,12 @@ app.get('/requests', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server started on port ${PORT}`);
 });
+
+// 🔹 удаление заявки
+app.delete('/request/:id', (req, res) => {
+  const id = Number(req.params.id);
+
+  requests = requests.filter(r => r.id !== id);
+
+  res.json({ success: true });
+});
