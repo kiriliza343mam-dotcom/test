@@ -6,12 +6,20 @@ const fetch = require('node-fetch');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 🔐 PostgreSQL (Railway)
+// 🔐 PostgreSQL (Railway) — УЛУЧШЕНО
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  max: 5,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000
+});
+
+// 💥 ОБЯЗАТЕЛЬНО — чтобы сервер не падал
+pool.on('error', (err) => {
+  console.error('💥 PostgreSQL pool error:', err);
 });
 
 app.use(cors());
@@ -24,7 +32,7 @@ const ALLOWED_STATUSES = ['new', 'in_progress', 'done'];
 const VK_TOKEN = process.env.VK_TOKEN;
 const VK_USER_ID = process.env.VK_USER_ID;
 
-// 🔹 отправка сообщения в VK
+// 🔹 отправка сообщения в VK (УЛУЧШЕНО)
 const sendVKMessage = async (text) => {
   if (!VK_TOKEN || !VK_USER_ID) {
     console.log('⚠️ VK не настроен');
@@ -32,7 +40,7 @@ const sendVKMessage = async (text) => {
   }
 
   try {
-    await fetch('https://api.vk.com/method/messages.send', {
+    const response = await fetch('https://api.vk.com/method/messages.send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -44,7 +52,14 @@ const sendVKMessage = async (text) => {
       })
     });
 
-    console.log('📨 VK уведомление отправлено');
+    const data = await response.json();
+
+    if (data.error) {
+      console.error('❌ VK API error:', data.error);
+    } else {
+      console.log('📨 VK уведомление отправлено');
+    }
+
   } catch (err) {
     console.error('❌ VK send error:', err);
   }
@@ -102,7 +117,7 @@ app.post('/request', async (req, res) => {
 
     console.log('📩 Новая заявка:', request);
 
-    // 🔥 уведомление в VK
+    // 🔥 VK уведомление
     await sendVKMessage(
       `🆕 Новая заявка!\n\n👤 ${name}\n📞 ${contact}\n💻 ${problem}`
     );
@@ -160,7 +175,7 @@ app.put('/request/:id', async (req, res) => {
 
     console.log(`🔄 Статус обновлён: id=${id}, status=${status}`);
 
-    // 🔥 уведомление в VK
+    // 🔥 VK уведомление
     await sendVKMessage(
       `🔄 Обновление заявки\nID: ${id}\n📌 Новый статус: ${status}`
     );
@@ -196,7 +211,6 @@ app.delete('/request/:id', async (req, res) => {
 
     console.log(`🗑 Удалена заявка id=${id}`);
 
-    // 🔥 уведомление (опционально)
     await sendVKMessage(`🗑 Удалена заявка ID: ${id}`);
 
     res.json({ success: true });
