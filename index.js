@@ -1,71 +1,25 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
-const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// 🔐 PostgreSQL (Railway) — УЛУЧШЕНО
+// 🔐 PostgreSQL (Railway)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
-  },
-  max: 5,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000
-});
-
-// 💥 ОБЯЗАТЕЛЬНО — чтобы сервер не падал
-pool.on('error', (err) => {
-  console.error('💥 PostgreSQL pool error:', err);
+  }
 });
 
 app.use(cors());
 app.use(express.json());
 
-// 🔐 допустимые статусы
+// допустимые статусы
 const ALLOWED_STATUSES = ['new', 'in_progress', 'done'];
 
-// 🔐 VK настройки
-const VK_TOKEN = process.env.VK_TOKEN;
-const VK_USER_ID = process.env.VK_USER_ID;
-
-// 🔹 отправка сообщения в VK (УЛУЧШЕНО)
-const sendVKMessage = async (text) => {
-  if (!VK_TOKEN || !VK_USER_ID) {
-    console.log('⚠️ VK не настроен');
-    return;
-  }
-
-  try {
-    const response = await fetch('https://api.vk.com/method/messages.send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id: VK_USER_ID,
-        message: text,
-        random_id: Date.now(),
-        access_token: VK_TOKEN,
-        v: '5.131'
-      })
-    });
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('❌ VK API error:', data.error);
-    } else {
-      console.log('📨 VK уведомление отправлено');
-    }
-
-  } catch (err) {
-    console.error('❌ VK send error:', err);
-  }
-};
-
-// 🔹 проверка сервера
+// 🔹 проверка
 app.get('/', (req, res) => {
   res.send('Server is working 🚀');
 });
@@ -113,18 +67,11 @@ app.post('/request', async (req, res) => {
       [name, contact, problem]
     );
 
-    const request = result.rows[0];
-
-    console.log('📩 Новая заявка:', request);
-
-    // 🔥 VK уведомление
-    await sendVKMessage(
-      `🆕 Новая заявка!\n\n👤 ${name}\n📞 ${contact}\n💻 ${problem}`
-    );
+    console.log('📩 Новая заявка:', result.rows[0]);
 
     res.json({
       success: true,
-      request
+      request: result.rows[0]
     });
 
   } catch (err) {
@@ -175,11 +122,6 @@ app.put('/request/:id', async (req, res) => {
 
     console.log(`🔄 Статус обновлён: id=${id}, status=${status}`);
 
-    // 🔥 VK уведомление
-    await sendVKMessage(
-      `🔄 Обновление заявки\nID: ${id}\n📌 Новый статус: ${status}`
-    );
-
     res.json({
       success: true,
       request: result.rows[0]
@@ -191,7 +133,7 @@ app.put('/request/:id', async (req, res) => {
   }
 });
 
-// 🔹 удаление заявки
+// 🔹 удаление
 app.delete('/request/:id', async (req, res) => {
   const id = Number(req.params.id);
 
@@ -211,8 +153,6 @@ app.delete('/request/:id', async (req, res) => {
 
     console.log(`🗑 Удалена заявка id=${id}`);
 
-    await sendVKMessage(`🗑 Удалена заявка ID: ${id}`);
-
     res.json({ success: true });
 
   } catch (err) {
@@ -221,7 +161,6 @@ app.delete('/request/:id', async (req, res) => {
   }
 });
 
-// 🚀 запуск
 app.listen(PORT, () => {
   console.log(`🚀 Server started on port ${PORT}`);
 });
