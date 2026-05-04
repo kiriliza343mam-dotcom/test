@@ -22,20 +22,35 @@ app.get('/', (req, res) => {
   res.send('Server is working 🚀');
 });
 
-// 🔥 создаём таблицу (если нет)
-pool.query(`
-  CREATE TABLE IF NOT EXISTS requests (
-    id SERIAL PRIMARY KEY,
-    name TEXT,
-    contact TEXT,
-    problem TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+// 🔥 создаём таблицу (правильно — через async)
+const initDB = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS requests (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        contact TEXT NOT NULL,
+        problem TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('✅ DB ready');
+  } catch (err) {
+    console.error('❌ DB init error:', err);
+  }
+};
+
+initDB();
 
 // 🔹 отправка заявки
 app.post('/request', async (req, res) => {
-  const { name, contact, problem } = req.body;
+  let { name, contact, problem } = req.body;
+
+  // 🔧 чистим данные
+  name = name?.trim();
+  contact = contact?.trim();
+  problem = problem?.trim();
 
   if (!name || !contact || !problem) {
     return res.status(400).json({
@@ -45,16 +60,19 @@ app.post('/request', async (req, res) => {
   }
 
   try {
-    await pool.query(
-      'INSERT INTO requests (name, contact, problem) VALUES ($1, $2, $3)',
+    const result = await pool.query(
+      'INSERT INTO requests (name, contact, problem) VALUES ($1, $2, $3) RETURNING *',
       [name, contact, problem]
     );
 
-    console.log('📩 Новая заявка:', name);
+    console.log('📩 Новая заявка:', result.rows[0]);
 
-    res.json({ success: true });
+    res.json({
+      success: true,
+      request: result.rows[0]
+    });
   } catch (err) {
-    console.error(err);
+    console.error('❌ POST error:', err);
     res.status(500).json({ error: 'DB error' });
   }
 });
@@ -68,20 +86,25 @@ app.get('/requests', async (req, res) => {
 
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error('❌ GET error:', err);
     res.status(500).json({ error: 'DB error' });
   }
 });
 
 // 🔹 удаление заявки
 app.delete('/request/:id', async (req, res) => {
-  const id = req.params.id;
+  const id = Number(req.params.id);
+
+  if (!id) {
+    return res.status(400).json({ error: 'Invalid ID' });
+  }
 
   try {
     await pool.query('DELETE FROM requests WHERE id = $1', [id]);
+
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error('❌ DELETE error:', err);
     res.status(500).json({ error: 'DB error' });
   }
 });
