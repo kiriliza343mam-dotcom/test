@@ -2,30 +2,55 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
+
+// ✅ правильный порт для Railway
+const PORT = process.env.PORT || 3001;
+
+// ✅ middleware
 app.use(cors());
 app.use(express.json());
 
+// временное хранилище
 let requests = [];
 
-// отправка заявки
+// 🔹 проверка сервера (очень полезно)
+app.get('/', (req, res) => {
+  res.send('Server is working 🚀');
+});
+
+// 🔹 отправка заявки
 app.post('/request', (req, res) => {
+  const { name, contact, problem } = req.body;
+
+  // простая валидация
+  if (!name || !contact || !problem) {
+    return res.status(400).json({
+      success: false,
+      message: 'Заполните все поля'
+    });
+  }
+
   const newRequest = {
     id: Date.now(),
-    ...req.body
+    name,
+    contact,
+    problem,
+    createdAt: new Date()
   };
 
   requests.push(newRequest);
 
-  console.log('Новая заявка:', newRequest);
+  console.log('📩 Новая заявка:', newRequest);
 
   res.json({ success: true });
 });
 
-// получение заявок
+// 🔹 получение всех заявок
 app.get('/requests', (req, res) => {
   res.json(requests);
 });
 
-app.listen(3001, () => {
-  console.log('🚀 Server started on http://localhost:3001');
+// 🔹 запуск сервера
+app.listen(PORT, () => {
+  console.log(`🚀 Server started on port ${PORT}`);
 });
